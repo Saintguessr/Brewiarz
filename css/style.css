@@ -68,6 +68,30 @@ body {
   cursor: pointer;
 }
 .icon-btn:hover { background: rgba(255,255,255,0.28); }
+.icon-btn.wide { width: auto; border-radius: 999px; padding: 0 14px; font-size: 0.85rem; white-space: nowrap; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+.update-banner {
+  background: var(--accent-2);
+  color: #fff;
+  text-align: center;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+.update-banner.hidden { display: none; }
+.update-banner button {
+  background: #fff;
+  color: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
 
 .container {
   max-width: 640px;
@@ -199,6 +223,64 @@ body {
 }
 .hour-open:hover { background: var(--surface-2); }
 
+.hour-text-toggle {
+  flex: 0 0 auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.hour-text-toggle:hover { background: var(--border); }
+.hour-text-toggle.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.text-panel {
+  margin: -2px 0 10px;
+  padding: 0 4px 4px;
+  animation: fadeIn .15s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.frame-wrap {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.frame-el {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 900px;
+  height: 1600px;
+  border: none;
+  background: #fff;
+  transform-origin: top left;
+}
+
+.frame-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  padding: 8px 4px 2px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.frame-controls input[type="range"] { vertical-align: middle; width: 90px; }
+.frame-controls .ctrl-reset { font-size: 0.75rem; }
+
+.frame-fallback {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  padding: 4px 4px 0;
+}
+.frame-fallback a { color: var(--accent); }
+
 .info-card {
   margin-top: 22px;
   font-size: 0.8rem;
@@ -237,3 +319,9 @@ body {
   margin-top: 30px;
 }
 .footer a { color: var(--text-dim); }
+
+@media (max-width: 480px) {
+  .frame-wrap { height: 340px; }
+  .frame-controls input[type="range"] { width: 70px; }
+  .icon-btn.wide { padding: 0 10px; font-size: 0.78rem; }
+}

@@ -21,7 +21,10 @@
   const BASE_URL = "https://brewiarz.pl/dzis.php?link=";
   const STORAGE_PREFIX = "brewiarz-lg:";
   const THEME_KEY = "brewiarz-lg:theme";
+  const CALIBRATION_KEY = "brewiarz-lg:frameCalibration";
   const HISTORY_DAYS = 14;
+
+  const DEFAULT_CALIBRATION = { top: 0, left: 0, scale: 100 };
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -67,6 +70,29 @@
 
   let currentDateKey = todayKey();
   let dayState = loadDay(currentDateKey);
+  let openPanelHourId = null; // tylko jeden panel z tekstem otwarty naraz
+  let remoteUnsubscribe = null;
+
+  // ---------- Kalibracja podglądu tekstu (ramka) ----------
+
+  function loadCalibration() {
+    try {
+      const raw = localStorage.getItem(CALIBRATION_KEY);
+      return raw ? { ...DEFAULT_CALIBRATION, ...JSON.parse(raw) } : { ...DEFAULT_CALIBRATION };
+    } catch (e) {
+      return { ...DEFAULT_CALIBRATION };
+    }
+  }
+
+  function saveCalibration(cal) {
+    localStorage.setItem(CALIBRATION_KEY, JSON.stringify(cal));
+  }
+
+  function applyCalibrationToFrame(frameEl, cal) {
+    frameEl.style.top = `-${cal.top}px`;
+    frameEl.style.left = `-${cal.left}px`;
+    frameEl.style.transform = `scale(${cal.scale / 100})`;
+  }
 
   function renderHeader() {
     $("#todayLabel").textContent = formatDateLabel(new Date());
@@ -107,23 +133,81 @@
       info.appendChild(time);
       info.appendChild(name);
 
+      const textToggle = document.createElement("button");
+      textToggle.className = "hour-text-toggle" + (openPanelHourId === hour.id ? " active" : "");
+      textToggle.textContent = openPanelHourId === hour.id ? "ukryj" : "pokaż tekst";
+      textToggle.addEventListener("click", () => toggleTextPanel(hour));
+
       const open = document.createElement("a");
       open.className = "hour-open";
       open.href = BASE_URL + hour.link;
       open.target = "_blank";
       open.rel = "noopener";
-      open.title = `Otwórz „${hour.name}” na brewiarz.pl`;
+      open.title = `Otwórz „${hour.name}” na brewiarz.pl w nowej karcie`;
       open.textContent = "↗";
-      // Otwarcie tekstu automatycznie proponuje odhaczenie po powrocie.
       open.addEventListener("click", () => {
         setTimeout(() => maybeSuggestCheck(hour.id), 400);
       });
 
       row.appendChild(check);
       row.appendChild(info);
+      row.appendChild(textToggle);
       row.appendChild(open);
       list.appendChild(row);
+
+      if (openPanelHourId === hour.id) {
+        list.appendChild(buildTextPanel(hour));
+      }
     });
+  }
+
+  function toggleTextPanel(hour) {
+    openPanelHourId = openPanelHourId === hour.id ? null : hour.id;
+    renderHours();
+  }
+
+  function buildTextPanel(hour) {
+    const tpl = document.getElementById("textPanelTemplate");
+    const node = tpl.content.firstElementChild.cloneNode(true);
+
+    const frame = node.querySelector(".frame-el");
+    const url = BASE_URL + hour.link;
+    frame.src = url;
+
+    const fallbackLink = node.querySelector(".frame-fallback-link");
+    fallbackLink.href = url;
+
+    const cal = loadCalibration();
+    applyCalibrationToFrame(frame, cal);
+
+    const topCtrl = node.querySelector(".ctrl-top");
+    const leftCtrl = node.querySelector(".ctrl-left");
+    const scaleCtrl = node.querySelector(".ctrl-scale");
+    topCtrl.value = cal.top;
+    leftCtrl.value = cal.left;
+    scaleCtrl.value = cal.scale;
+
+    function updateFromControls() {
+      const next = {
+        top: Number(topCtrl.value),
+        left: Number(leftCtrl.value),
+        scale: Number(scaleCtrl.value),
+      };
+      applyCalibrationToFrame(frame, next);
+      saveCalibration(next);
+    }
+    topCtrl.addEventListener("input", updateFromControls);
+    leftCtrl.addEventListener("input", updateFromControls);
+    scaleCtrl.addEventListener("input", updateFromControls);
+
+    node.querySelector(".ctrl-reset").addEventListener("click", () => {
+      topCtrl.value = DEFAULT_CALIBRATION.top;
+      leftCtrl.value = DEFAULT_CALIBRATION.left;
+      scaleCtrl.value = DEFAULT_CALIBRATION.scale;
+      updateFromControls();
+    });
+
+    return node;
   }
 
   function maybeSuggestCheck(hourId) {
@@ -145,6 +229,7 @@
     renderHours();
     renderProgress();
     renderHistory();
+    if (window.BrewiarzSync) window.BrewiarzSync.pushDay(currentDateKey, dayState);
   }
 
   function resetToday() {
@@ -154,6 +239,7 @@
     renderHours();
     renderProgress();
     renderHistory();
+    if (window.BrewiarzSync) window.BrewiarzSync.pushDay(currentDateKey, dayState);
   }
 
   // ---------- Historia ----------
@@ -214,6 +300,117 @@
     applyTheme(next);
   }
 
+  // ---------- Synchronizacja Firebase (opcjonalna) ----------
+
+  function updateSyncButton(user) {
+    const btn = $("#syncBtn");
+    if (user) {
+      const label = user.displayName ? user.displayName.split(" ")[0] : "Konto";
+      btn.textContent = `🔄 ${label} (wyloguj)`;
+      btn.title = "Kliknij, aby się wylogować";
+    } else {
+      btn.textContent = "🔄 Zaloguj";
+      btn.title = "Zaloguj się, aby synchronizować postęp między urządzeniami";
+    }
+  }
+
+  function subscribeRemoteForToday() {
+    if (remoteUnsubscribe) { remoteUnsubscribe(); remoteUnsubscribe = null; }
+    if (!window.BrewiarzSync || !window.BrewiarzSync.currentUser) return;
+    remoteUnsubscribe = window.BrewiarzSync.subscribeDay(currentDateKey, (remoteData) => {
+      const { updatedAt, ...hoursOnly } = remoteData || {};
+      dayState = hoursOnly;
+      saveDay(currentDateKey, dayState);
+      renderHours();
+      renderProgress();
+      renderHistory();
+    });
+  }
+
+  function initSync() {
+    // Moduł Firebase (js/firebase-sync.js) ładuje SDK asynchronicznie z CDN,
+    // więc może jeszcze nie być gotowy w chwili DOMContentLoaded — czekamy
+    // wtedy na zdarzenie "brewiarz-sync-ready".
+    if (!window.BrewiarzSync) {
+      const btn = $("#syncBtn");
+      btn.disabled = true;
+      btn.textContent = "🔄 …";
+      window.addEventListener("brewiarz-sync-ready", () => {
+        btn.disabled = false;
+        wireSyncUI();
+      }, { once: true });
+      window.addEventListener("brewiarz-sync-unavailable", () => {
+        btn.style.display = "none";
+      }, { once: true });
+      return;
+    }
+    wireSyncUI();
+  }
+
+  function wireSyncUI() {
+    if (!window.BrewiarzSync) return;
+
+    $("#syncBtn").addEventListener("click", () => {
+      if (window.BrewiarzSync.currentUser) {
+        window.BrewiarzSync.signOutUser();
+      } else {
+        window.BrewiarzSync.signIn();
+      }
+    });
+
+    window.BrewiarzSync.onAuthChange(async (user) => {
+      updateSyncButton(user);
+      if (user) {
+        // Po zalogowaniu: wypchnij bieżący stan i zacznij nasłuchiwać zmian z innych urządzeń.
+        await window.BrewiarzSync.pushDay(currentDateKey, dayState);
+        subscribeRemoteForToday();
+        const remoteHistory = await window.BrewiarzSync.fetchHistory(HISTORY_DAYS);
+        Object.entries(remoteHistory).forEach(([dateKey, data]) => {
+          const { updatedAt, ...hoursOnly } = data || {};
+          saveDay(dateKey, hoursOnly);
+        });
+        renderHistory();
+      } else if (remoteUnsubscribe) {
+        remoteUnsubscribe();
+        remoteUnsubscribe = null;
+      }
+    });
+  }
+
+  // ---------- Auto-aktualizacja Service Workera ----------
+
+  function initServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+
+    navigator.serviceWorker.register("sw.js").then((registration) => {
+      // Sprawdzaj co jakiś czas i przy powrocie do karty, czy jest nowsza wersja.
+      setInterval(() => registration.update(), 60 * 60 * 1000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") registration.update();
+      });
+
+      registration.addEventListener("updatefound", () => {
+        const newWorker = registration.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener("statechange", () => {
+          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+            $("#updateBanner").classList.remove("hidden");
+            $("#updateReloadBtn").onclick = () => {
+              newWorker.postMessage({ type: "SKIP_WAITING" });
+            };
+          }
+        });
+      });
+    }).catch((e) => console.error("Rejestracja service workera nieudana:", e));
+
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
+  }
+
   // ---------- Codzienna zmiana daty w tle ----------
 
   function watchForMidnight() {
@@ -226,6 +423,7 @@
         renderHours();
         renderProgress();
         renderHistory();
+        subscribeRemoteForToday();
       }
     }, 60 * 1000);
   }
@@ -249,9 +447,8 @@
       btn.textContent = hidden ? "Pokaż historię ostatnich dni ▾" : "Ukryj historię ▴";
     });
 
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
-    }
+    initServiceWorker();
+    initSync();
   }
 
   document.addEventListener("DOMContentLoaded", init);

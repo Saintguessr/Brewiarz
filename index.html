@@ -18,9 +18,17 @@
       <span class="brand-icon">✝</span>
       <span class="brand-name">Brewiarz LG</span>
     </div>
-    <button id="themeToggle" class="icon-btn" title="Zmień motyw" aria-label="Zmień motyw">🌙</button>
+    <div class="topbar-actions">
+      <button id="syncBtn" class="icon-btn wide" title="Synchronizacja">🔄 Zaloguj</button>
+      <button id="themeToggle" class="icon-btn" title="Zmień motyw" aria-label="Zmień motyw">🌙</button>
+    </div>
   </div>
 </header>
+
+<div id="updateBanner" class="update-banner hidden">
+  <span>Dostępna nowa wersja aplikacji.</span>
+  <button id="updateReloadBtn">Odśwież</button>
+</div>
 
 <main class="container">
 
@@ -43,14 +51,34 @@
     <!-- wygenerowane przez JS -->
   </section>
 
+  <template id="textPanelTemplate">
+    <div class="text-panel">
+      <div class="frame-wrap">
+        <iframe class="frame-el" loading="lazy" referrerpolicy="no-referrer" title="Tekst modlitwy"></iframe>
+      </div>
+      <div class="frame-controls">
+        <label>↕ <input type="range" class="ctrl-top" min="0" max="1200" step="5"></label>
+        <label>↔ <input type="range" class="ctrl-left" min="0" max="900" step="5"></label>
+        <label>🔍 <input type="range" class="ctrl-scale" min="60" max="160" step="2"></label>
+        <button class="ctrl-reset link-btn">domyślne</button>
+      </div>
+      <div class="frame-fallback">
+        Jeśli tekst się nie wyświetla poprawnie (strona blokuje osadzanie),
+        <a class="frame-fallback-link" href="#" target="_blank" rel="noopener">otwórz ją bezpośrednio</a>.
+      </div>
+    </div>
+  </template>
+
   <section class="info-card">
     <p>
-      Aplikacja nie kopiuje ani nie przechowuje tekstów liturgicznych —
-      wszystkie treści (prawa autorskie: Konferencja Episkopatu Polski
-      i Wydawnictwo Pallottinum) pozostają wyłącznie na stronie
-      <a href="https://brewiarz.pl/dzis.php" target="_blank" rel="noopener">brewiarz.pl</a>.
-      Ta aplikacja jedynie linkuje do właściwej godziny na dany dzień
-      i lokalnie (na Twoim urządzeniu) zapamiętuje, którą godzinę już odmówiłeś/aś.
+      Aplikacja nie kopiuje ani nie przechowuje tekstów liturgicznych we
+      własnym kodzie ani bazie danych — wszystkie treści (prawa autorskie:
+      Konferencja Episkopatu Polski i Wydawnictwo Pallottinum) są ładowane
+      na żywo, bezpośrednio z <a href="https://brewiarz.pl/dzis.php" target="_blank" rel="noopener">brewiarz.pl</a>,
+      w oknie podglądu poniżej każdej godziny. Ta aplikacja jedynie
+      wyświetla ten podgląd i lokalnie (na Twoim urządzeniu, oraz opcjonalnie
+      w Twoim własnym koncie Firebase) zapamiętuje, którą godzinę już
+      odmówiłeś/aś — do użytku osobistego.
     </p>
   </section>
 
@@ -66,6 +94,7 @@
      Kod aplikacji: MIT</p>
 </footer>
 
-<script src="js/app.js"></script>
+<script type="module" src="js/firebase-sync.js"></script>
+<script src="js/app.js" defer></script>
 </body>
 </html>
