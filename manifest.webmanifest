@@ -1,0 +1,13 @@
+{
+  "name": "Brewiarz LG — Liturgia Godzin na dziś",
+  "short_name": "Brewiarz LG",
+  "description": "Codzienne godziny brewiarzowe z brewiarz.pl z odhaczaniem przeczytanych godzin.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#16121f",
+  "theme_color": "#3b2f63",
+  "lang": "pl",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brewiarz LG — Liturgia Godzin na dziś</title>
+<meta name="description" content="Codzienne godziny brewiarzowe z brewiarz.pl z możliwością odhaczania przeczytanych godzin.">
+<meta name="theme-color" content="#3b2f63">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-icon">✝</span>
+      <span class="brand-name">Brewiarz LG</span>
+    </div>
+    <button id="themeToggle" class="icon-btn" title="Zmień motyw" aria-label="Zmień motyw">🌙</button>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="date-card">
+    <div class="date-main" id="todayLabel">—</div>
+    <div class="date-sub" id="liturgicalNote">Internetowa Liturgia Godzin — brewiarz.pl</div>
+  </section>
+
+  <section class="progress-card">
+    <div class="progress-header">
+      <span id="progressText">0 / 7 przeczytane</span>
+      <button id="resetDay" class="link-btn">wyczyść dzisiaj</button>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+  </section>
+
+  <section class="hours-list" id="hoursList">
+    <!-- wygenerowane przez JS -->
+  </section>
+
+  <section class="info-card">
+    <p>
+      Aplikacja nie kopiuje ani nie przechowuje tekstów liturgicznych —
+      wszystkie treści (prawa autorskie: Konferencja Episkopatu Polski
+      i Wydawnictwo Pallottinum) pozostają wyłącznie na stronie
+      <a href="https://brewiarz.pl/dzis.php" target="_blank" rel="noopener">brewiarz.pl</a>.
+      Ta aplikacja jedynie linkuje do właściwej godziny na dany dzień
+      i lokalnie (na Twoim urządzeniu) zapamiętuje, którą godzinę już odmówiłeś/aś.
+    </p>
+  </section>
+
+  <section class="history-card">
+    <button id="toggleHistory" class="link-btn">Pokaż historię ostatnich dni ▾</button>
+    <div id="historyBody" class="history-body hidden"></div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <p>Dane liturgiczne: <a href="https://brewiarz.pl" target="_blank" rel="noopener">brewiarz.pl</a> ·
+     Kod aplikacji: MIT</p>
+</footer>
+
+<script src="js/app.js"></script>
+</body>
+</html>
