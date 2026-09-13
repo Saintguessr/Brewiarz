@@ -300,23 +300,22 @@
     applyTheme(next);
   }
 
-  // ---------- Synchronizacja Firebase (opcjonalna) ----------
+  // ---------- Synchronizacja Firebase (opcjonalna, kod synchronizacji) ----------
 
-  function updateSyncButton(user) {
+  function updateSyncButton(connected) {
     const btn = $("#syncBtn");
-    if (user) {
-      const label = user.displayName ? user.displayName.split(" ")[0] : "Konto";
-      btn.textContent = `🔄 ${label} (wyloguj)`;
-      btn.title = "Kliknij, aby się wylogować";
+    if (connected) {
+      btn.textContent = "🔄 połączono";
+      btn.title = "Synchronizacja aktywna — kliknij, aby rozłączyć lub zmienić kod";
     } else {
-      btn.textContent = "🔄 Zaloguj";
-      btn.title = "Zaloguj się, aby synchronizować postęp między urządzeniami";
+      btn.textContent = "🔄 Synchro";
+      btn.title = "Ustaw kod synchronizacji, aby połączyć to urządzenie z innymi";
     }
   }
 
   function subscribeRemoteForToday() {
     if (remoteUnsubscribe) { remoteUnsubscribe(); remoteUnsubscribe = null; }
-    if (!window.BrewiarzSync || !window.BrewiarzSync.currentUser) return;
+    if (!window.BrewiarzSync || !window.BrewiarzSync.isConnected()) return;
     remoteUnsubscribe = window.BrewiarzSync.subscribeDay(currentDateKey, (remoteData) => {
       const { updatedAt, ...hoursOnly } = remoteData || {};
       dayState = hoursOnly;
@@ -325,6 +324,27 @@
       renderProgress();
       renderHistory();
     });
+  }
+
+  async function afterConnected() {
+    updateSyncButton(true);
+    await window.BrewiarzSync.pushDay(currentDateKey, dayState);
+    subscribeRemoteForToday();
+    const remoteHistory = await window.BrewiarzSync.fetchHistory();
+    Object.entries(remoteHistory).forEach(([dateKey, data]) => {
+      const { updatedAt, ...hoursOnly } = data || {};
+      saveDay(dateKey, hoursOnly);
+    });
+    renderHistory();
+  }
+
+  function promptForSyncCode() {
+    const code = window.prompt(
+      "Podaj kod synchronizacji (dowolny ciąg znaków — wpisz identyczny na każdym urządzeniu, które ma się ze sobą synchronizować):"
+    );
+    if (code && code.trim()) {
+      window.BrewiarzSync.connectSync(code).then(afterConnected);
+    }
   }
 
   function initSync() {
@@ -351,29 +371,25 @@
     if (!window.BrewiarzSync) return;
 
     $("#syncBtn").addEventListener("click", () => {
-      if (window.BrewiarzSync.currentUser) {
-        window.BrewiarzSync.signOutUser();
+      if (window.BrewiarzSync.isConnected()) {
+        const disconnect = confirm(
+          "Synchronizacja jest aktywna na tym urządzeniu.\n\nOK = rozłącz\nAnuluj = zmień kod synchronizacji"
+        );
+        if (disconnect) {
+          window.BrewiarzSync.disconnectSync();
+          if (remoteUnsubscribe) { remoteUnsubscribe(); remoteUnsubscribe = null; }
+          updateSyncButton(false);
+        } else {
+          promptForSyncCode();
+        }
       } else {
-        window.BrewiarzSync.signIn();
+        promptForSyncCode();
       }
     });
 
-    window.BrewiarzSync.onAuthChange(async (user) => {
-      updateSyncButton(user);
-      if (user) {
-        // Po zalogowaniu: wypchnij bieżący stan i zacznij nasłuchiwać zmian z innych urządzeń.
-        await window.BrewiarzSync.pushDay(currentDateKey, dayState);
-        subscribeRemoteForToday();
-        const remoteHistory = await window.BrewiarzSync.fetchHistory(HISTORY_DAYS);
-        Object.entries(remoteHistory).forEach(([dateKey, data]) => {
-          const { updatedAt, ...hoursOnly } = data || {};
-          saveDay(dateKey, hoursOnly);
-        });
-        renderHistory();
-      } else if (remoteUnsubscribe) {
-        remoteUnsubscribe();
-        remoteUnsubscribe = null;
-      }
+    window.BrewiarzSync.onAuthChange((status) => {
+      updateSyncButton(!!status.connected);
+      if (status.connected) afterConnected();
     });
   }
 
