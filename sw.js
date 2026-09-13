@@ -5,7 +5,7 @@
 // plików powłoki, żeby przeglądarki wykryły nową wersję service workera
 // (sama zmiana treści tego pliku już to robi automatycznie, bo przeglądarka
 // porównuje bajt po bajcie plik sw.js przy każdym `registration.update()`).
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `brewiarz-lg-shell-${CACHE_VERSION}`;
 
 const SHELL_FILES = [
