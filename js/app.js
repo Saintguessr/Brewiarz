@@ -300,22 +300,22 @@
     applyTheme(next);
   }
 
-  // ---------- Synchronizacja Firebase (opcjonalna) ----------
+  // ---------- Synchronizacja Firebase (opcjonalna, kod synchronizacji) ----------
 
-  function updateSyncButton(syncCode) {
+  function updateSyncButton(connected) {
     const btn = $("#syncBtn");
-    if (syncCode) {
-      btn.textContent = `🔄 ${syncCode}`;
-      btn.title = "Zsynchronizowano tym kodem. Kliknij, aby go zobaczyć albo zakończyć synchronizację.";
+    if (connected) {
+      btn.textContent = "🔄 połączono";
+      btn.title = "Synchronizacja aktywna — kliknij, aby rozłączyć lub zmienić kod";
     } else {
-      btn.textContent = "🔄 Synchronizuj";
-      btn.title = "Utwórz kod synchronizacji albo wpisz kod z innego urządzenia";
+      btn.textContent = "🔄 Synchro";
+      btn.title = "Ustaw kod synchronizacji, aby połączyć to urządzenie z innymi";
     }
   }
 
   function subscribeRemoteForToday() {
     if (remoteUnsubscribe) { remoteUnsubscribe(); remoteUnsubscribe = null; }
-    if (!window.BrewiarzSync || !window.BrewiarzSync.syncCode) return;
+    if (!window.BrewiarzSync || !window.BrewiarzSync.isConnected()) return;
     remoteUnsubscribe = window.BrewiarzSync.subscribeDay(currentDateKey, (remoteData) => {
       const { updatedAt, ...hoursOnly } = remoteData || {};
       dayState = hoursOnly;
@@ -324,6 +324,27 @@
       renderProgress();
       renderHistory();
     });
+  }
+
+  async function afterConnected() {
+    updateSyncButton(true);
+    await window.BrewiarzSync.pushDay(currentDateKey, dayState);
+    subscribeRemoteForToday();
+    const remoteHistory = await window.BrewiarzSync.fetchHistory();
+    Object.entries(remoteHistory).forEach(([dateKey, data]) => {
+      const { updatedAt, ...hoursOnly } = data || {};
+      saveDay(dateKey, hoursOnly);
+    });
+    renderHistory();
+  }
+
+  function promptForSyncCode() {
+    const code = window.prompt(
+      "Podaj kod synchronizacji (dowolny ciąg znaków — wpisz identyczny na każdym urządzeniu, które ma się ze sobą synchronizować):"
+    );
+    if (code && code.trim()) {
+      window.BrewiarzSync.connectSync(code).then(afterConnected);
+    }
   }
 
   function initSync() {
@@ -346,70 +367,29 @@
     wireSyncUI();
   }
 
-  async function pullAfterLinking() {
-    // Po utworzeniu/dołączeniu do kodu: wypchnij bieżący stan, zacznij
-    // nasłuchiwać zmian z innych urządzeń i dociągnij historię z chmury.
-    await window.BrewiarzSync.pushDay(currentDateKey, dayState);
-    subscribeRemoteForToday();
-    const remoteHistory = await window.BrewiarzSync.fetchHistory(HISTORY_DAYS);
-    Object.entries(remoteHistory).forEach(([dateKey, data]) => {
-      const { updatedAt, ...hoursOnly } = data || {};
-      saveDay(dateKey, hoursOnly);
-    });
-    renderHistory();
-  }
-
-  async function handleSyncClick() {
-    const sync = window.BrewiarzSync;
-    if (!sync) return;
-
-    if (sync.syncCode) {
-      const answer = window.prompt(
-        `Ten sprzęt jest zsynchronizowany kodem: ${sync.syncCode}\n\n` +
-          `Wpisz ten sam kod na kolejnym urządzeniu, aby je też połączyć.\n\n` +
-          `Aby zakończyć synchronizację TYLKO na tym urządzeniu (dane w chmurze zostają), wpisz: wypisz`
-      );
-      if (answer && answer.trim().toLowerCase() === "wypisz") {
-        sync.unlink();
-        updateSyncButton(null);
-        if (remoteUnsubscribe) { remoteUnsubscribe(); remoteUnsubscribe = null; }
-      }
-      return;
-    }
-
-    const entered = window.prompt(
-      "Synchronizacja między urządzeniami — bez logowania przez Google:\n\n" +
-        "• To PIERWSZE urządzenie: zostaw pole puste i kliknij OK — dostaniesz kod do wpisania na drugim urządzeniu.\n" +
-        "• Masz już kod z innego urządzenia: wpisz go poniżej."
-    );
-    if (entered === null) return; // anulowano
-
-    try {
-      let code;
-      if (entered.trim() === "") {
-        code = await sync.createSyncCode();
-        window.alert(
-          `Twój kod synchronizacji: ${code}\n\nWpisz go na drugim urządzeniu (przycisk 🔄 Synchronizuj), aby połączyć postęp.`
-        );
-      } else {
-        code = await sync.joinSyncCode(entered);
-      }
-      updateSyncButton(code);
-      await pullAfterLinking();
-    } catch (e) {
-      console.error(e);
-      window.alert("Nie udało się zsynchronizować: " + (e && e.message ? e.message : "nieznany błąd"));
-    }
-  }
-
   function wireSyncUI() {
     if (!window.BrewiarzSync) return;
 
-    $("#syncBtn").addEventListener("click", handleSyncClick);
+    $("#syncBtn").addEventListener("click", () => {
+      if (window.BrewiarzSync.isConnected()) {
+        const disconnect = confirm(
+          "Synchronizacja jest aktywna na tym urządzeniu.\n\nOK = rozłącz\nAnuluj = zmień kod synchronizacji"
+        );
+        if (disconnect) {
+          window.BrewiarzSync.disconnectSync();
+          if (remoteUnsubscribe) { remoteUnsubscribe(); remoteUnsubscribe = null; }
+          updateSyncButton(false);
+        } else {
+          promptForSyncCode();
+        }
+      } else {
+        promptForSyncCode();
+      }
+    });
 
-    window.BrewiarzSync.onAuthChange((user, syncCode) => {
-      updateSyncButton(syncCode);
-      if (syncCode) subscribeRemoteForToday();
+    window.BrewiarzSync.onAuthChange((status) => {
+      updateSyncButton(!!status.connected);
+      if (status.connected) afterConnected();
     });
   }
 
@@ -418,8 +398,23 @@
   function initServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
 
+    function showUpdateBannerFor(worker) {
+      $("#updateBanner").classList.remove("hidden");
+      $("#updateReloadBtn").onclick = () => {
+        worker.postMessage({ type: "SKIP_WAITING" });
+      };
+    }
+
     navigator.serviceWorker.register("sw.js").then((registration) => {
-      // Sprawdzaj co jakiś czas i przy powrocie do karty, czy jest nowsza wersja.
+      // Jeśli nowa wersja zdążyła się już zainstalować i czeka (np. appka
+      // była zamknięta w tle, gdy pojawiła się aktualizacja) — pokaż baner od razu.
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        showUpdateBannerFor(registration.waiting);
+      }
+
+      // Sprawdzaj co jakiś czas, przy powrocie do karty i zaraz po starcie,
+      // czy jest nowsza wersja.
+      registration.update();
       setInterval(() => registration.update(), 60 * 60 * 1000);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") registration.update();
@@ -430,10 +425,7 @@
         if (!newWorker) return;
         newWorker.addEventListener("statechange", () => {
           if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-            $("#updateBanner").classList.remove("hidden");
-            $("#updateReloadBtn").onclick = () => {
-              newWorker.postMessage({ type: "SKIP_WAITING" });
-            };
+            showUpdateBannerFor(newWorker);
           }
         });
       });
@@ -485,6 +477,14 @@
 
     initServiceWorker();
     initSync();
+
+    window.addEventListener("brewiarz-sync-error", (e) => {
+      $("#syncErrorText").textContent = e.detail.message;
+      $("#syncErrorBanner").classList.remove("hidden");
+    });
+    $("#syncErrorClose").addEventListener("click", () => {
+      $("#syncErrorBanner").classList.add("hidden");
+    });
   }
 
   document.addEventListener("DOMContentLoaded", init);

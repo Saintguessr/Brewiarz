@@ -19,7 +19,7 @@
       <span class="brand-name">Brewiarz LG</span>
     </div>
     <div class="topbar-actions">
-      <button id="syncBtn" class="icon-btn wide" title="Synchronizacja kodem między urządzeniami">🔄 Synchronizuj</button>
+      <button id="syncBtn" class="icon-btn wide" title="Synchronizacja">🔄 Synchro</button>
       <button id="themeToggle" class="icon-btn" title="Zmień motyw" aria-label="Zmień motyw">🌙</button>
     </div>
   </div>
@@ -28,6 +28,11 @@
 <div id="updateBanner" class="update-banner hidden">
   <span>Dostępna nowa wersja aplikacji.</span>
   <button id="updateReloadBtn">Odśwież</button>
+</div>
+
+<div id="syncErrorBanner" class="sync-error-banner hidden">
+  <span id="syncErrorText"></span>
+  <button id="syncErrorClose" aria-label="Zamknij">✕</button>
 </div>
 
 <main class="container">

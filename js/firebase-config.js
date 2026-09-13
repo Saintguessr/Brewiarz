@@ -2,11 +2,6 @@
 // (Konsola Firebase → Ustawienia projektu → Twoje aplikacje → SDK setup and configuration).
 // To NIE są dane tajne — Firebase web API keys są publiczne z założenia,
 // bezpieczeństwo zapewniają reguły Firestore (patrz README.md).
-//
-// Synchronizacja w tej wersji korzysta z logowania ANONIMOWEGO (bez konta
-// Google) — pamiętaj, żeby w konsoli Firebase włączyć dostawcę logowania
-// "Anonymous" (Authentication → Sign-in method), inaczej synchronizacja
-// się nie połączy.
 export const firebaseConfig = {
   apiKey: "AIzaSyCeeaqUsoU2l2ABkfOZAuoZKfjzgCObrfI",
   authDomain: "brewiarz-lg.firebaseapp.com",
