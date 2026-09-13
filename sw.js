@@ -5,7 +5,7 @@
 // plików powłoki, żeby przeglądarki wykryły nową wersję service workera
 // (sama zmiana treści tego pliku już to robi automatycznie, bo przeglądarka
 // porównuje bajt po bajcie plik sw.js przy każdym `registration.update()`).
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CACHE_NAME = `brewiarz-lg-shell-${CACHE_VERSION}`;
 
 const SHELL_FILES = [
@@ -21,11 +21,22 @@ const SHELL_FILES = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES))
+    caches.open(CACHE_NAME).then((cache) =>
+      // Ważne: pobieramy pliki z { cache: "reload" }, żeby ominąć zwykły
+      // dyskowy cache HTTP przeglądarki i zawsze zapisać w CacheStorage
+      // naprawdę świeżą wersję z serwera — samo cache.addAll(SHELL_FILES)
+      // mogłoby (w zależności od nagłówków Cache-Control serwera, np.
+      // GitHub Pages) trafić w nieaktualną kopię z dysku.
+      Promise.all(
+        SHELL_FILES.map((url) => cache.add(new Request(url, { cache: "reload" })))
+      )
+    )
   );
   // Celowo NIE wołamy tu self.skipWaiting() — nowa wersja czeka, aż
   // użytkownik potwierdzi odświeżenie (patrz updateBanner w app.js),
   // żeby nie podmieniać aplikacji "pod ręką" w trakcie korzystania.
+  // Dzięki temu, gdy już potwierdzi, w CacheStorage czeka na niego
+  // kompletna, w pełni aktualna wersja powłoki aplikacji.
 });
 
 self.addEventListener("activate", (event) => {
@@ -60,7 +71,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
       const cached = await cache.match(event.request);
-      const networkFetch = fetch(event.request)
+      const networkFetch = fetch(event.request, { cache: "no-store" })
         .then((response) => {
           if (response && response.ok) cache.put(event.request, response.clone());
           return response;

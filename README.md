@@ -118,48 +118,93 @@ różnicę w pliku `sw.js` przy kolejnym sprawdzeniu. Jeśli chcesz wymusić
 błyskawiczne wykrycie zmiany, możesz dodatkowo podbić `CACHE_VERSION`
 na górze `sw.js`.
 
-## Synchronizacja przez Firebase (opcjonalna)
+Podczas instalacji nowej wersji service worker celowo pobiera pliki
+powłoki z `{ cache: "reload" }` (z pominięciem zwykłego dyskowego cache
+HTTP przeglądarki), więc to, co trafia do jego własnego magazynu
+(`CacheStorage`), zawsze jest naprawdę najświeższą wersją z serwera —
+a nie przypadkowo nieaktualną kopią sprzed odświeżenia. Po Twoim
+potwierdzeniu w bannerze „Odśwież” aplikacja przełącza się dokładnie na
+tę świeżo pobraną wersję.
+
+## Synchronizacja przez Firebase (opcjonalna, bez konta Google)
 
 Domyślnie aplikacja działa w 100% lokalnie (dane tylko w przeglądarce).
 Jeśli chcesz mieć swój postęp zsynchronizowany między telefonem a
-komputerem, skonfiguruj własny, darmowy projekt Firebase:
+komputerem, skonfiguruj własny, darmowy projekt Firebase. Logowanie jest
+**anonimowe** — nie zakładasz konta ani nie logujesz się przez Google;
+urządzenia parujesz krótkim **kodem synchronizacji**, który sam generujesz
+w aplikacji.
 
 1. Wejdź na [console.firebase.google.com](https://console.firebase.google.com)
    i utwórz nowy projekt (np. `brewiarz-lg`).
-2. **Authentication → Sign-in method** → włącz dostawcę **Google**.
-3. **Authentication → Settings → Authorized domains** → dodaj domenę,
-   pod którą będzie działać aplikacja, np. `<twoja-nazwa>.github.io`
-   (oraz `localhost` do testów lokalnych).
-4. **Firestore Database → Create database** → utwórz bazę (tryb produkcyjny).
-5. W zakładce **Rules** wklej i opublikuj:
+2. **Authentication → Sign-in method** → włącz dostawcę **Anonymous**.
+3. **Firestore Database → Create database** → utwórz bazę (tryb produkcyjny).
+4. W zakładce **Rules** wklej i opublikuj:
    ```
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
-       match /users/{userId}/days/{day} {
-         allow read, write: if request.auth != null && request.auth.uid == userId;
+       match /syncGroups/{code} {
+         // Każdy zalogowany (choćby anonimowo) użytkownik może sprawdzić,
+         // czy dany kod istnieje, żeby móc do niego dołączyć.
+         allow get: if request.auth != null;
+
+         // Utworzenie nowej grupy: dokładnie z jednym UID — swoim własnym.
+         allow create: if request.auth != null
+           && request.resource.data.uids is list
+           && request.resource.data.uids.size() == 1
+           && request.resource.data.uids[0] == request.auth.uid;
+
+         // Dołączenie do istniejącej grupy: wolno dopisać WYŁĄCZNIE
+         // własny UID, jeden na raz, do listy uczestników (max 6 urządzeń).
+         allow update: if request.auth != null
+           && resource.data.uids.size() < 6
+           && request.resource.data.uids.size() == resource.data.uids.size() + 1
+           && request.resource.data.uids.hasAll(resource.data.uids)
+           && request.auth.uid in request.resource.data.uids;
+
+         match /days/{day} {
+           // Odczyt/zapis dni tylko dla UID-ów należących do tej grupy.
+           allow read, write: if request.auth != null
+             && request.auth.uid in
+                get(/databases/$(database)/documents/syncGroups/$(code)).data.uids;
+         }
        }
      }
    }
    ```
-   Dzięki temu każdy użytkownik widzi i zapisuje wyłącznie własne dane.
-6. **Ustawienia projektu (ikona ⚙️) → Twoje aplikacje → Dodaj aplikację → Web (`</>`)**
+   Dzięki temu tylko urządzenia znające / należące do danego kodu widzą
+   i zapisują dane tej konkretnej grupy.
+5. **Ustawienia projektu (ikona ⚙️) → Twoje aplikacje → Dodaj aplikację → Web (`</>`)**
    → skopiuj wygenerowany obiekt `firebaseConfig`.
-7. Wklej go do pliku `js/firebase-config.js` w tym repozytorium (zastępując
-   wartości `WKLEJ_TUTAJ`), zapisz, zacommituj i wypchnij.
+6. Wklej go do pliku `js/firebase-config.js` w tym repozytorium, zapisz,
+   zacommituj i wypchnij.
 
-Po zalogowaniu (przycisk „🔄 Zaloguj” w prawym górnym rogu) aplikacja
-zacznie zapisywać zaznaczenia w Twoim Firestore i synchronizować je
-w czasie rzeczywistym między urządzeniami, na których jesteś zalogowany
-tym samym kontem Google.
+### Jak sparować urządzenia
+
+1. Na **pierwszym** urządzeniu kliknij „🔄 Synchronizuj”, zostaw pole
+   puste i zatwierdź — aplikacja wygeneruje 6-znakowy **kod synchronizacji**
+   (np. `7K9XPM`) i go pokaże.
+2. Na **drugim** urządzeniu kliknij „🔄 Synchronizuj” i wpisz ten sam kod.
+3. Od tej chwili oba urządzenia współdzielą te same zaznaczenia godzin —
+   zmiana na jednym pojawia się na drugim w czasie rzeczywistym.
+4. Kliknięcie „🔄 <kod>” na już połączonym urządzeniu pokazuje jego kod
+   ponownie (przydatne, żeby sparować kolejne urządzenie) albo pozwala
+   zakończyć synchronizację *tylko na tym urządzeniu* (dane w chmurze
+   zostają nietknięte, można się później dołączyć ponownie tym samym kodem).
 
 > Klucz `apiKey` w konfiguracji Firebase **nie jest tajny** — to
 > standardowy, publiczny identyfikator po stronie klienta. Bezpieczeństwo
-> danych zapewniają reguły Firestore z punktu 5, a nie ukrywanie tego pliku.
+> danych zapewniają reguły Firestore z punktu 4, a nie ukrywanie tego pliku.
+>
+> Sam kod synchronizacji działa trochę jak hasło do Twojego postępu
+> modlitwy (dane niskiej wrażliwości, ale jednak Twoje) — podawaj go tylko
+> sobie, na kolejnym własnym urządzeniu, nie publicznie.
 
 Jeśli nie chcesz korzystać z synchronizacji, po prostu zostaw
-`js/firebase-config.js` bez zmian — przycisk logowania sam zniknie,
-a aplikacja będzie działać wyłącznie lokalnie jak dotychczas.
+`js/firebase-config.js` bez zmian albo ustaw w nim `firebaseEnabled = false`
+— przycisk synchronizacji sam zniknie, a aplikacja będzie działać
+wyłącznie lokalnie jak dotychczas.
 
 ## Konfiguracja godzin
 
